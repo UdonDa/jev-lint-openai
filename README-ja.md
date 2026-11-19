@@ -75,7 +75,7 @@ npx jev-lint init                      # .jev-lint.yaml を書く
 npx jev-lint check src --dry-run       # 何を聞くかと値段。リクエストは飛ばない
 ```
 
-キーを読み込むのは環境変数からだけで (`OPENROUTER_API_KEY`、`TYPESAFE_API_KEY`、`TYPESAFEAI_API_KEY` のいずれか)、config ファイルからは読まない。config はバージョン管理に入るものであり、キーはそうではないから。モデルに聞かない操作はキー無しで動く。`--dry-run` は値段を出し、`jev-lint rules` は何が走るかを並べ、`jev-lint replay` は記録済みの実行を採点し直し、CI はコミット済みキャッシュからキー無しで lint できる。
+キーを読み込むのは環境変数からだけで (`OPENROUTER_API_KEY`、`OPENAI_API_KEY`、`TYPESAFE_API_KEY`、`TYPESAFEAI_API_KEY` のいずれか)、config ファイルからは読まない。config はバージョン管理に入るものであり、キーはそうではないから。モデルに聞かない操作はキー無しで動く。`--dry-run` は値段を出し、`jev-lint rules` は何が走るかを並べ、`jev-lint replay` は記録済みの実行を採点し直し、CI はコミット済みキャッシュからキー無しで lint できる。
 
 ## 推奨モデル
 
@@ -113,6 +113,23 @@ npx jev-lint run typescript/fn-name-promises src \
 OpenRouterの実費は `usage.cost` から取得する。
 無料版のリクエストは3.2秒間隔に制限し、別途日次上限がある。
 モデルごとに検査キャッシュのファイルを分ける。新鮮な比較には `--cache none` を使う。
+
+OpenAI の [Decisions API](https://developers.openai.com/api/docs/guides/decisions) は
+`--model openai:gpt-6-luna` と `OPENAI_API_KEY` で選択でき、初期ルールの選択と lint の両方に使う。
+OpenAI のキーがあるだけでは選択されない。`--model`、config の `model:`、`JEV_LINT_MODEL` で指定する。
+既定のモデルのまま config に `apiKeyEnv: OPENAI_API_KEY` と書いた場合も OpenAI を選択する。
+OpenAI はキーを `OPENAI_API_KEY` からだけ読み、それ以外の `apiKeyEnv` で指定したキーを OpenAI に送ることはない。
+
+```bash
+export OPENAI_API_KEY='<your-api-key>'
+npx jev-lint run typescript/fn-name-promises src --model openai:gpt-6-luna
+```
+
+同梱の cutoff は Jev で較正したもので、gpt-6-luna では検証していない。
+実費は応答の `usage` から、公表されている非キャッシュ・キャッシュ・キャッシュ書き込みの入力単価で計算する。出力は課金されない。
+クライアントは公表されている最も低いレート階層 (毎分 200 万トークン) に合わせて送信間隔を調整し、そこから上限を探る。
+400 問を超えるリクエストは分割する。入力が 272K トークンを超えるとリクエスト全体が 2 倍の単価になるため、そう見積もったリクエストは送信前に拒否する。
+OpenAI の判定は専用のキャッシュファイルに保存する。`init` が書く git hook は、TypeSafe か OpenRouter のキーが無ければ引き続きスキップする。
 
 Cloudflare Clef と Clef-flash も、リポジトリを checkout して実験的に比較評価できる。
 `just clef-plan` でリクエストと費用を確認し、Cloudflare の認証情報を設定して

@@ -216,7 +216,7 @@ options:
       --source-sha <sha>   scan: expected HEAD (defaults to the current commit)
       --model-revision <id> scan: immutable model deployment identity for cache reuse
       --max-candidates <n> scan: limit output; omissions make the scan partial
-      --model <id>         Jev model (default: ${DEFAULT_MODEL}), or openrouter:<decision-model-id>
+      --model <id>         Jev model (default: ${DEFAULT_MODEL}), openrouter:<decision-model-id> or openai:<decision-model-id>
       --force              ignore cached verdicts
       --accept             eval: run, then make that run the baseline
       --accept-last        eval: make the previous run (last.json) the baseline, no requests
@@ -273,6 +273,7 @@ environment:
   JEV_LINT_CACHE           verdict cache path ("none" to disable; --cache takes precedence)
   JEV_LINT_MODEL           override the model
   OPENROUTER_API_KEY       offer OpenRouter for default Jev; select openrouter:<id> explicitly in CI
+  OPENAI_API_KEY           key for openai:<id> models; never selects OpenAI by itself
   JEV_LINT_AST_GREP        path to an ast-grep binary
 
   A flag beats .jev-lint.yaml, and the file beats these defaults. The API key

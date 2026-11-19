@@ -23,6 +23,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import YAML from "yaml";
+import { OPENAI_DEFAULT_MODEL, OPENAI_KEY_VARS } from "./openai.ts";
 import { OPENROUTER_JEV } from "./openrouter.ts";
 import { GROUP_MODES, LANGUAGES, SEVERITIES, STATE_ARMS } from "./types.ts";
 import { API_KEY_VARS, BASE_URL_VARS, DEFAULT_MODEL, fromEnv } from "./jev.ts";
@@ -99,9 +100,9 @@ export interface LoadedConfig {
 }
 
 export function modelWithKeyEnv(model: string | null, apiKeyEnv?: string): string | null {
-  if (apiKeyEnv === "OPENROUTER_API_KEY" && (model ?? process.env.JEV_LINT_MODEL ?? DEFAULT_MODEL) === DEFAULT_MODEL) {
-    return `openrouter:${OPENROUTER_JEV}`;
-  }
+  if ((model ?? process.env.JEV_LINT_MODEL ?? DEFAULT_MODEL) !== DEFAULT_MODEL) return model;
+  if (apiKeyEnv === "OPENROUTER_API_KEY") return `openrouter:${OPENROUTER_JEV}`;
+  if (apiKeyEnv === OPENAI_KEY_VARS[0]) return `openai:${OPENAI_DEFAULT_MODEL}`;
   return model;
 }
 
@@ -542,10 +543,16 @@ export function applyConfig(
     opts.unsureBelow = config.unsureBelow;
   }
   // Not a jev-lint variable, so it is set rather than read: the client reads
-  // the environment itself, and `apiKeyEnv` names where the key lives.
-  if (config.apiKeyEnv && config.apiKeyEnv !== "OPENROUTER_API_KEY") {
+  // the environment itself, and `apiKeyEnv` names where the TypeSafe key
+  // lives. It is never copied into OPENAI_API_KEY: configs written before the
+  // OpenAI provider name TypeSafe keys here (the template above suggests
+  // TYPESAFE_API_KEY), and copying one under an `openai:` model would send it
+  // to OpenAI. A provider's own variable is never copied anywhere either: its
+  // client reads it already, and a copy is how it would reach TypeSafe.
+  if (config.apiKeyEnv && !["OPENROUTER_API_KEY", OPENAI_KEY_VARS[0]].includes(config.apiKeyEnv)) {
     const key = fromEnv([config.apiKeyEnv]);
-    if (key) process.env[API_KEY_VARS[0]] = key;
+    const openai = (opts.model ?? process.env.JEV_LINT_MODEL ?? "").startsWith("openai:");
+    if (key && !openai) process.env[API_KEY_VARS[0]] = key;
   }
   if (opts.baseUrl) process.env[BASE_URL_VARS[0]] = opts.baseUrl;
 }

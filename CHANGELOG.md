@@ -8,6 +8,9 @@ change are in [docs/internal/findings.md](docs/internal/findings.md).
 
 ## Unreleased
 
+- Add OpenAI's Decisions API: `--model openai:gpt-6-luna` with `OPENAI_API_KEY`, for starter selection and lint. Only an explicit selection uses it. It gets its own cache file and is priced from usage at OpenAI's input rates. Shipped cutoffs are not yet validated on it.
+- Changed: `apiKeyEnv: OPENAI_API_KEY` now selects OpenAI for the default model. It no longer serves as the TypeSafe key for any model. A key named by any other `apiKeyEnv` is never sent to OpenAI.
+
 ## 0.9.0 — 2026-11-19
 
 - Commandless startup and `auto` now ask for confirmation. In an unconfigured Git project, they select starter rules from up to 64 tracked filenames, print the proposed YAML, then lint up to three files within a 32 KiB source budget. Use `check` to run a full check directly.
