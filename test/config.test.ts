@@ -618,3 +618,35 @@ await testAsync("config: init writes a language-qualified key for every shipped 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("config: apiKeyEnv never moves a key between providers", () => {
+  const vars = ["OPENAI_API_KEY", "OPENROUTER_API_KEY", "TYPESAFE_API_KEY", "MY_KEY", "JEV_LINT_MODEL"] as const;
+  const saved = vars.map((k) => [k, process.env[k]] as const);
+  const reset = () => { for (const k of vars) delete process.env[k]; };
+  try {
+    reset(); process.env.OPENAI_API_KEY = "openai-secret";
+    const named = configurable();
+    applyConfig(named, { apiKeyEnv: "OPENAI_API_KEY" }, new Set());
+    assert.equal(named.model, "openai:gpt-6-luna", "naming the OpenAI key with the default model selects OpenAI");
+    assert.equal(process.env.TYPESAFE_API_KEY, undefined, "and the key is not copied where the TypeSafe client reads");
+
+    reset(); process.env.OPENAI_API_KEY = "openai-secret";
+    applyConfig(configurable(), { model: "jev-2.0.0", apiKeyEnv: "OPENAI_API_KEY" }, new Set());
+    assert.equal(process.env.TYPESAFE_API_KEY, undefined, "an explicit Jev model does not carry the OpenAI key to TypeSafe");
+
+    reset(); process.env.TYPESAFE_API_KEY = "typesafe-secret"; process.env.OPENAI_API_KEY = "openai-secret";
+    applyConfig(configurable(), { model: "openai:gpt-6-luna", apiKeyEnv: "TYPESAFE_API_KEY" }, new Set());
+    assert.equal(process.env.OPENAI_API_KEY, "openai-secret", "a TypeSafe key named by an older config is not sent to OpenAI");
+
+    reset(); process.env.MY_KEY = "custom-secret";
+    applyConfig(configurable(), { model: "openai:gpt-6-luna", apiKeyEnv: "MY_KEY" }, new Set());
+    assert.equal(process.env.OPENAI_API_KEY, undefined, "OpenAI reads only its own variable");
+    assert.equal(process.env.TYPESAFE_API_KEY, undefined);
+
+    reset(); process.env.MY_KEY = "custom-secret";
+    applyConfig(configurable(), { apiKeyEnv: "MY_KEY" }, new Set());
+    assert.equal(process.env.TYPESAFE_API_KEY, "custom-secret", "a custom variable still reaches TypeSafe for a Jev model");
+  } finally {
+    for (const [k, v] of saved) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+});

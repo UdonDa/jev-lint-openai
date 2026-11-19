@@ -114,7 +114,7 @@ npx jev-lint init                      # writes .jev-lint.yaml
 npx jev-lint check src --dry-run       # what it would ask, and the price. No request.
 ```
 
-The key is read from the environment only — `OPENROUTER_API_KEY`, `TYPESAFE_API_KEY`, or
+The key is read from the environment only — `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `TYPESAFE_API_KEY`, or
 `TYPESAFEAI_API_KEY` — and never from the config file, which belongs in
 version control and a key does not. Everything that does not ask the model
 works without one: `--dry-run` prices a run, `jev-lint rules` lists what
@@ -157,6 +157,28 @@ These are opt-in experiments with existing cutoffs, not replacements validated
 across the catalog. Live OpenRouter cost comes from billed `usage.cost`;
 free requests are paced at 3.2-second intervals and remain subject to daily limits.
 Native models get separate verdict-cache files; use `--cache none` for fresh comparisons.
+
+OpenAI's [Decisions API](https://developers.openai.com/api/docs/guides/decisions)
+is selectable with `--model openai:gpt-6-luna` and `OPENAI_API_KEY`, for both
+starter selection and lint. An OpenAI key alone never selects it; name it in
+`--model`, config's `model:`, or `JEV_LINT_MODEL`. Config's
+`apiKeyEnv: OPENAI_API_KEY` selects it for the default model. OpenAI reads its
+key only from `OPENAI_API_KEY`; a key named by any other `apiKeyEnv` is never
+sent to it.
+
+```bash
+export OPENAI_API_KEY='<your-api-key>'
+npx jev-lint run typescript/fn-name-promises src --model openai:gpt-6-luna
+```
+
+The shipped cutoffs were fitted on Jev and have not been validated on
+gpt-6-luna. Live cost is priced from the reply's `usage` at the listed
+uncached, cached and cache-write input rates; output is not billed. The client
+paces itself to the lowest listed rate tier, 2M tokens per minute, and probes
+upward. Requests of more than 400 questions are split. A request estimated past
+272K input tokens, where the whole request is billed at twice the rate, is
+refused before sending. OpenAI verdicts get their own cache file. The git hooks
+written by `init` still skip without a TypeSafe or OpenRouter key.
 
 Cloudflare Clef and Clef-flash are optional experimental models for comparison
 from a repository checkout. `just clef-plan` previews the requests and cost;

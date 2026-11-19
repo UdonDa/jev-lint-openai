@@ -237,3 +237,58 @@ await testAsync("cmd-model: ambient OpenRouter alone suggests a free trial witho
     assert.deepEqual(requests, []);
   });
 });
+
+await testAsync("cmd-model: openai:<id> runs a lint end to end on the OpenAI key, cached apart, and prices its dry run", async () => {
+  await project(async () => {
+    process.env.OPENAI_API_KEY = "openai-fixture";
+    const sent: string[] = [];
+    globalThis.fetch = async (url, init) => {
+      assert.equal(String(url), "https://api.openai.com/v1/decisions");
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer openai-fixture");
+      const body = JSON.parse(String(init?.body)) as { model: string; questions: Array<{ type: string; name: string }> };
+      sent.push(body.model);
+      return Response.json({ model: body.model, answers: body.questions.map((q) => ({ type: "predicate", name: q.name, probability: 0.1 })), usage: { input_tokens: 100, output_tokens: 0 } });
+    };
+    try {
+      const args = ["run", "typescript/fn-name-promises", "src", "--no-config", "--cache", "cache.json", "--json", "--model", "openai:gpt-6-luna"];
+      const first = await cli(args);
+      assert.equal(first.code, 0, first.log); assert.deepEqual(sent, ["gpt-6-luna"]);
+      assert.ok(existsSync(modelCachePath(join(process.cwd(), "cache.json"), "openai:gpt-6-luna")!)); assert.ok(!existsSync("cache.json"));
+      assert.equal((await cli(args)).code, 0); assert.deepEqual(sent, ["gpt-6-luna"], "the second run is answered from the OpenAI cache");
+      const dry = await cli(["run", "typescript/fn-name-promises", "src", "--no-config", "--dry-run", "--json", "--model", "openai:gpt-6-luna"]);
+      assert.equal(dry.code, 0); assert.equal(dry.value.usd, dry.value.tokens / 1_000_000 * 0.1); assert.match(dry.value.estimateNote, /uncached input price/);
+      assert.equal(sent.length, 1);
+    } finally { delete process.env.OPENAI_API_KEY; }
+  });
+});
+
+await testAsync("cmd-model: automatic startup on openai:<id> selects and checks on OpenAI, and without its key sends nothing", async () => {
+  await project(async (requests) => {
+    delete process.env.TYPESAFE_API_KEY; delete process.env.TYPESAFEAI_API_KEY; delete process.env.OPENROUTER_API_KEY;
+    const missing = await cli(["--no-config", "--json", "--model", "openai:gpt-6-luna"]);
+    assert.equal(missing.code, 3); assert.match(missing.log, /OPENAI_API_KEY/); assert.equal(requests.length, 0);
+    process.env.OPENAI_API_KEY = "openai-fixture";
+    const kinds: string[][] = [];
+    globalThis.fetch = async (url, init) => {
+      assert.equal(String(url), "https://api.openai.com/v1/decisions");
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer openai-fixture");
+      const body = JSON.parse(String(init?.body)) as { questions: Array<{ type: string; name: string; instructions: string; choices?: Array<{ value: string }> }> };
+      kinds.push(body.questions.map((q) => q.type));
+      return Response.json({ model: "gpt-6-luna", usage: { input_tokens: 1000, output_tokens: 0 }, answers: body.questions.map((q) => {
+        if (q.type !== "choice") return { type: "predicate", name: q.name, probability: 0.1 };
+        const choice = q.instructions.includes("typescript/fn-name-promises") ? "enable" : "defer";
+        return { type: "choice", name: q.name, choice, confidence: 1, probabilities: q.choices!.map(({ value }) => ({ value, probability: value === choice ? 1 : 0 })) };
+      }) });
+    };
+    try {
+      const result = await cli(["--no-config", "--cache", "none", "--json", "--model", "openai:gpt-6-luna"], async (message) => {
+        assert.match(message, /openai.*gpt-6-luna/); assert.equal(kinds.length, 0); return "approved";
+      });
+      assert.equal(result.code, 0, result.log);
+      assert.ok(kinds[0]!.every((k) => k === "choice"), "starter selection asks choice questions");
+      assert.ok(kinds.slice(1).flat().includes("predicate"), "the check asks the enabled rule as predicates");
+      assert.equal(result.value.introspection.model, "gpt-6-luna");
+      assert.equal(result.value.check.spent.calls + result.value.introspection.usage.requests, kinds.length);
+    } finally { delete process.env.OPENAI_API_KEY; }
+  });
+});

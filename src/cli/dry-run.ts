@@ -9,6 +9,14 @@ import { idleLanguages, silentRules } from "../report.ts";
 import type { Rule, RunResult } from "../types.ts";
 import type { Log, Options } from "./args.ts";
 
+/** Why a native provider's estimate differs from what it will bill; null for Jev, whose price the estimate is. */
+function estimateNote(opts: Options): string | null {
+  const provider = modelSpec(opts.model).provider;
+  if (provider === "openrouter") return "Jev token estimator before provider splitting; repeated state can add input. Live cost uses usage.cost.";
+  if (provider === "openai") return "Jev token estimator at the uncached input price, before splitting; repeated state can add input and cached input costs less. Live cost is priced from usage.";
+  return null;
+}
+
 export function printDryRun(result: RunResult, rules: Rule[], opts: Options, out: Log, log: Log): number {
   const price = modelSpec(opts.model).inputUsdPerMillion;
   if (opts.format === "json") {
@@ -29,7 +37,8 @@ export function printDryRun(result: RunResult, rules: Rule[], opts: Options, out
   }
   if (result.batches.length > 40) out(`  … and ${result.batches.length - 40} more`);
   out(`~${tokens.toLocaleString()} input tokens, ~$${((tokens / 1e6) * price).toFixed(5)}`);
-  if (modelSpec(opts.model).provider === "openrouter") out("Estimate uses the Jev token estimator before provider splitting; repeated state can add input. Live cost comes from usage.cost.");
+  const note = estimateNote(opts);
+  if (note) out(`Estimate uses the ${note}`);
   // Per rule, dearest first: which rule to drop, or run alone, is a
   // decision the total cannot inform.
   if (rules.length > 1 && result.batches.length > 0) {
@@ -129,7 +138,7 @@ export function dryRunDocument(result: RunResult, rules: Rule[], opts: Options):
     requests: result.batches.length,
     tokens,
     usd: (tokens / 1e6) * modelSpec(opts.model).inputUsdPerMillion,
-    ...(modelSpec(opts.model).provider === "openrouter" ? { estimateNote: "Jev token estimator before provider splitting; repeated state can add input. Live cost uses usage.cost." } : {}),
+    ...(estimateNote(opts) ? { estimateNote: estimateNote(opts) } : {}),
     retry: result.retry ?? 1,
     batches: result.batches.map((b) => ({
       file: b.file,

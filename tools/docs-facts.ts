@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_MODEL } from "../src/jev.ts";
+import { OPENAI_MODELS } from "../src/openai.ts";
 import { OPENROUTER_MODELS } from "../src/openrouter.ts";
 import { collectRows } from "./rules-md.ts";
 import { INTROSPECTION_QUESTION } from "../src/introspection.ts";
@@ -42,7 +43,13 @@ Experimental native decision models use \`--model openrouter:<id>\` and \`OPENRO
 | --- | ---: | ---: |
 ${Object.entries(OPENROUTER_MODELS).map(([id, spec]) => `| \`${id}\` | ${spec.inputUsdPerMillion} | ${spec.intervalMs} |`).join("\n")}
 
-These are explicit experiments, not catalog-wide replacements. Live cost uses provider \`usage.cost\`; dry runs use estimated input at the listed rate, before native splitting. Native cache filenames include a hash of the endpoint and requested model, separate from legacy Jev cache filenames.
+OpenAI's Decisions API uses \`--model openai:<id>\` and \`OPENAI_API_KEY\`, and is never selected by the environment key alone:
+
+| ID | Listed uncached input USD/M tokens | Questions per request |
+| --- | ---: | ---: |
+${Object.entries(OPENAI_MODELS).map(([id, spec]) => `| \`${id}\` | ${spec.inputUsdPerMillion} | ${spec.questions} |`).join("\n")}
+
+These are explicit experiments, not catalog-wide replacements. Live OpenRouter cost uses provider \`usage.cost\`; live OpenAI cost is priced from \`usage\` tokens at the listed uncached, cached and cache-write rates; dry runs use estimated input at the listed rate, before native splitting. Native cache filenames include a hash of the endpoint and requested model, separate from legacy Jev cache filenames.
 
 ## Initial rule selection
 
@@ -52,7 +59,7 @@ Commandless startup and \`auto\` use existing configuration when present. Withou
 
 When the CLI detects OPENROUTER_API_KEY, it asks before sending data to OpenRouter for default Jev, even with a TypeSafe key or --yes. Noninteractive runs can select an openrouter:<id> model in config, --model or JEV_LINT_MODEL. For default Jev, apiKeyEnv: OPENROUTER_API_KEY in the config also selects OpenRouter. The free Perplexity trial uses the same free Decider for selection and checking. Other OpenRouter checking models use Jev on OpenRouter for selection. Regular use with TypeSafe Jev is strongly recommended.
 
-\`introspect\` selects initial screening rules from metadata using Jev. Its current enable criterion is:
+\`introspect\` selects initial screening rules from metadata using Jev, or the OpenAI model when one is selected. Its current enable criterion is:
 
 ${INTROSPECTION_QUESTION.criteria.enable}
 

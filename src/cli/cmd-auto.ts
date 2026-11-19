@@ -65,7 +65,7 @@ export async function cmdAuto(opts: Options, context: Context, out: Log, log: Lo
       API_KEY_SETUP,
     ].join("\n");
     if (!opts.dryRun && !opts.explainScope && !client && (!spec.keyAvailable || (spec.implicitOpenRouter && !fromEnv(API_KEY_VARS)))) {
-      log(guidance);
+      log(spec.provider === "openai" ? spec.setup : guidance);
       if (spec.implicitOpenRouter) log("OPENROUTER_API_KEY is set. Choose the free command above, or unset it to use Jev directly.");
       if (opts.format === "json") out(JSON.stringify({ schema: "jev-lint-auto-1", status: "setup-required", freeCommand, introspection: null, check: null }));
       return 3;
@@ -115,7 +115,7 @@ export async function cmdAuto(opts: Options, context: Context, out: Log, log: Lo
     if (stopped !== null) return stopped;
     if (!unchanged()) return incomplete("project inventory or rule catalog changed during confirmation");
     const budget = { maxRequests: 8, maxInputTokens: 32000, maxUsd: 0.05, maxMs: 120000 };
-    const report = await introspect(input, { client: client ?? createModelClient({ model: selectionModel, baseUrl: spec.provider === "openrouter" ? null : opts.baseUrl,
+    const report = await introspect(input, { client: client ?? createModelClient({ model: selectionModel, baseUrl: spec.provider === "jev" ? opts.baseUrl : null,
       budget, beforeSend: async () => { if (!unchanged()) throw new Error("project inventory or rule catalog changed"); },
     }), snapshotCheck: unchanged });
     if (report.status !== "complete" || report.snapshotChanged) return incomplete("rule selection is incomplete or stale", report);

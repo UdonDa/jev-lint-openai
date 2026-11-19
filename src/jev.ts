@@ -130,7 +130,7 @@ const MIN_TOKENS_PER_SECOND = 20_000;
 const MAX_TOKENS_PER_SECOND = 2_000_000;
 
 /** A positive number from the environment, or nothing. */
-function envNumber(name: string): number | null {
+export function envNumber(name: string): number | null {
   const n = Number(process.env[name]);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -344,6 +344,12 @@ export class Jev implements AskClient {
   protected waitForRequest(ms: number): Promise<void> { return this.control.wait(ms); }
   protected async beforeRequest(): Promise<void> {}
   get endpointIdentity(): string { return this.baseUrl; }
+  /** Where one request goes and what it carries. A provider with another wire format overrides this and `decode`. */
+  protected encode(state: unknown, questions: Record<string, Question>): { url: string; body: string } {
+    return { url: `${this.baseUrl}/v1/systemone`, body: JSON.stringify({ model: this.model, state, questions }) };
+  }
+  /** A 200 reply, parsed, in Jev's own shape. */
+  protected decode(parsed: unknown, _questions: Record<string, Question>): unknown { return parsed; }
 
   /** One request: one state, N questions, N answers. */
   async ask(state: unknown, questions: Record<string, Question>): Promise<SystemOneResponse> {
@@ -353,7 +359,7 @@ export class Jev implements AskClient {
     const names = Object.keys(questions);
     if (names.length === 0) return { answers: {}, usage: { input_tokens: 0 } };
 
-    const body = JSON.stringify({ model: this.model, state, questions });
+    const { url, body } = this.encode(state, questions);
     if (this.onRequest) this.onRequest(body);
 
     let last = new JevError("no attempt made");
@@ -374,7 +380,7 @@ export class Jev implements AskClient {
       const timer = setTimeout(() => ac.abort(), this.timeoutMs);
       let res;
       try {
-        res = await this.transport(`${this.baseUrl}/v1/systemone`, {
+        res = await this.transport(url, {
           method: "POST",
           headers: {
             authorization: `Bearer ${this.apiKey}`,
@@ -397,7 +403,8 @@ export class Jev implements AskClient {
 
       const text = await res.text();
       if (res.ok) {
-        const parsed = JSON.parse(text);
+        // The checks below are what make the decoded reply trustworthy, so it is read untyped until they pass.
+        const parsed = this.decode(JSON.parse(text), questions) as any;
         if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new JevError("invalid response envelope");
         if (parsed.usage !== undefined) {
           if (parsed.usage === null || typeof parsed.usage !== "object" || Array.isArray(parsed.usage)

@@ -41,7 +41,13 @@ Experimental native decision models use `--model openrouter:<id>` and `OPENROUTE
 | `baseten/mammoth-1` | 0.1 | 0 |
 | `perplexity/pplx-decider-v1.3:free` | 0 | 3200 |
 
-These are explicit experiments, not catalog-wide replacements. Live cost uses provider `usage.cost`; dry runs use estimated input at the listed rate, before native splitting. Native cache filenames include a hash of the endpoint and requested model, separate from legacy Jev cache filenames.
+OpenAI's Decisions API uses `--model openai:<id>` and `OPENAI_API_KEY`, and is never selected by the environment key alone:
+
+| ID | Listed uncached input USD/M tokens | Questions per request |
+| --- | ---: | ---: |
+| `gpt-6-luna` | 0.1 | 400 |
+
+These are explicit experiments, not catalog-wide replacements. Live OpenRouter cost uses provider `usage.cost`; live OpenAI cost is priced from `usage` tokens at the listed uncached, cached and cache-write rates; dry runs use estimated input at the listed rate, before native splitting. Native cache filenames include a hash of the endpoint and requested model, separate from legacy Jev cache filenames.
 
 ## Initial rule selection
 
@@ -51,7 +57,7 @@ Commandless startup and `auto` use existing configuration when present. Without 
 
 When the CLI detects OPENROUTER_API_KEY, it asks before sending data to OpenRouter for default Jev, even with a TypeSafe key or --yes. Noninteractive runs can select an openrouter:<id> model in config, --model or JEV_LINT_MODEL. For default Jev, apiKeyEnv: OPENROUTER_API_KEY in the config also selects OpenRouter. The free Perplexity trial uses the same free Decider for selection and checking. Other OpenRouter checking models use Jev on OpenRouter for selection. Regular use with TypeSafe Jev is strongly recommended.
 
-`introspect` selects initial screening rules from metadata using Jev. Its current enable criterion is:
+`introspect` selects initial screening rules from metadata using Jev, or the OpenAI model when one is selected. Its current enable criterion is:
 
 ONLY these exact rule IDs qualify for the core starter: fn-name-promises with eligible source files in any language; test-name-verifies-claim with .test/.spec/test_/_test behavior-test paths; agent-instruction-is-unclear or agent-instructions-conflict with AGENTS.md. Read the ID after the language slash. Every other rule ID is defer or skip, even if it mentions names or tests. Existing violations or source bodies are not required for these core rules.
 
